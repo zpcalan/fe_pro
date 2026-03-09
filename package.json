@@ -1,0 +1,262 @@
+{
+  "name": "vscode-cue-pro",
+  "displayName": "Cue Pro - Repo-Level Edit Prediction",
+  "description": "Repository-level edit sequence prediction powered by GLM. Predicts related code changes across your codebase and keeps you in the flow state.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code prediction",
+    "edit sequence",
+    "flow state",
+    "repo-level"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ets",
+        "extensions": [".ets"],
+        "aliases": ["ArkTS", "ets"]
+      }
+    ],
+    "commands": [
+      {
+        "command": "cuePro.triggerAnalysis",
+        "title": "Cue Pro: Analyze Edit Intent",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "cuePro.acceptCurrentEdit",
+        "title": "Cue Pro: Accept Current Edit Suggestion"
+      },
+      {
+        "command": "cuePro.rejectCurrentEdit",
+        "title": "Cue Pro: Reject Current Edit Suggestion"
+      },
+      {
+        "command": "cuePro.jumpToNextEdit",
+        "title": "Cue Pro: Jump to Next Predicted Edit",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "cuePro.jumpToPrevEdit",
+        "title": "Cue Pro: Jump to Previous Predicted Edit",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "cuePro.clearSequence",
+        "title": "Cue Pro: Clear Edit Sequence",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "cuePro.indexWorkspace",
+        "title": "Cue Pro: Index Workspace (build vector store)",
+        "icon": "$(database)"
+      },
+      {
+        "command": "cuePro.showPanel",
+        "title": "Cue Pro: Show Edit Sequence Panel",
+        "icon": "$(timeline-view-icon)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "cuePro.jumpToNextEdit",
+        "key": "ctrl+shift+]",
+        "mac": "cmd+shift+]",
+        "when": "cuePro.hasSequence"
+      },
+      {
+        "command": "cuePro.jumpToPrevEdit",
+        "key": "ctrl+shift+[",
+        "mac": "cmd+shift+[",
+        "when": "cuePro.hasSequence"
+      },
+      {
+        "command": "cuePro.acceptCurrentEdit",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "cuePro.hasActiveEdit"
+      },
+      {
+        "command": "cuePro.rejectCurrentEdit",
+        "key": "escape",
+        "when": "cuePro.hasActiveEdit && editorTextFocus"
+      },
+      {
+        "command": "cuePro.triggerAnalysis",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ],
+    "configuration": {
+      "title": "Cue Pro",
+      "properties": {
+        "cuePro.glm.apiUrl": {
+          "type": "string",
+          "default": "https://ark.cn-beijing.volces.com/api/v3/",
+          "description": "GLM API base URL (OpenAI-compatible)"
+        },
+        "cuePro.glm.apiKey": {
+          "type": "string",
+          "default": "19011e8a-b25f-4327-9aaa-f379343af9cf",
+          "description": "GLM API key",
+          "markdownDescription": "Your GLM API key. Get it from [Zhipu AI Platform](https://open.bigmodel.cn/). **Tip:** Use VS Code settings sync to keep this across machines."
+        },
+        "cuePro.glm.model": {
+          "type": "string",
+          "default": "ep-20260212143324-vw8sr",
+          "description": "GLM model to use for intent reasoning and edit generation"
+        },
+        "cuePro.embedding.apiUrl": {
+          "type": "string",
+          "default": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+          "description": "Embedding service base URL (OpenAI-compatible, /v1/embeddings endpoint)"
+        },
+        "cuePro.embedding.apiKey": {
+          "type": "string",
+          "default": "sk-82d016a8f808468894626e0ec54a0d2a",
+          "description": "Embedding API key (if required)"
+        },
+        "cuePro.embedding.model": {
+          "type": "string",
+          "default": "text-embedding-v4",
+          "description": "Embedding model name"
+        },
+        "cuePro.embedding.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable semantic vector search for better context retrieval"
+        },
+        "cuePro.trigger.debounceMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 10000,
+          "description": "Milliseconds of edit inactivity before triggering analysis"
+        },
+        "cuePro.trigger.minEditLines": {
+          "type": "number",
+          "default": 1,
+          "description": "Minimum lines changed before triggering analysis"
+        },
+        "cuePro.trigger.minSavesToTrigger": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "Number of file saves to accumulate before triggering analysis"
+        },
+        "cuePro.context.maxEditHistory": {
+          "type": "number",
+          "default": 20,
+          "description": "Maximum number of recent edits to include in context"
+        },
+        "cuePro.context.maxLspReferences": {
+          "type": "number",
+          "default": 15,
+          "description": "Maximum LSP symbol references to fetch"
+        },
+        "cuePro.context.maxSemanticResults": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum semantic search results to include"
+        },
+        "cuePro.context.codeContextLines": {
+          "type": "number",
+          "default": 20,
+          "description": "Lines of code context around each referenced location"
+        },
+        "cuePro.indexing.extensions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [".ts", ".tsx", ".js", ".jsx", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".c"],
+          "description": "File extensions to index for semantic search"
+        },
+        "cuePro.indexing.excludePatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["**/node_modules/**", "**/out/**", "**/dist/**", "**/.git/**", "**/build/**"],
+          "description": "Glob patterns to exclude from indexing"
+        },
+        "cuePro.ui.showInlineDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline decorations in editor for predicted edit locations"
+        },
+        "cuePro.ui.autoShowPanel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically show the edit sequence panel when a sequence is generated"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cuePro",
+          "title": "Cue Pro",
+          "icon": "$(sparkle)"
+        }
+      ]
+    },
+    "views": {
+      "cuePro": [
+        {
+          "type": "webview",
+          "id": "cuePro.sequencePanel",
+          "name": "Edit Sequence",
+          "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "cuePro.triggerAnalysis",
+          "when": "editorTextFocus",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "cuePro.clearSequence",
+          "when": "view == cuePro.sequencePanel",
+          "group": "navigation"
+        },
+        {
+          "command": "cuePro.indexWorkspace",
+          "when": "view == cuePro.sequencePanel",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  }
+}
