@@ -1,6 +1,7 @@
 // ============================================================
 // panel/editSequencePanel.ts  —  Sidebar WebView panel
-// Shows the predicted edit sequence and code review tabs
+// Shows a unified, priority-sorted list of predicted edits + code review issues
+// Sorting scheme A: error → high-flow(≥0.8) → warning → mid-flow(0.5~0.8) → info → low-flow → completed
 // ============================================================
 
 import * as vscode from 'vscode';
@@ -190,54 +191,17 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   }
   .btn-icon:hover { background: var(--vscode-toolbar-hoverBackground); border-radius: 3px; }
 
-  /* ── Tabs ── */
-  .tab-bar {
-    display: flex;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
-    background: var(--vscode-sideBar-background);
-    flex-shrink: 0;
-  }
-  .tab {
-    padding: 6px 14px;
-    font-size: 11px;
-    cursor: pointer;
-    border: none;
-    background: transparent;
-    color: var(--vscode-descriptionForeground);
-    border-bottom: 2px solid transparent;
-    font-family: inherit;
-    transition: color 0.1s;
-  }
-  .tab:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
-  .tab.active {
-    color: var(--vscode-foreground);
-    border-bottom-color: var(--vscode-focusBorder);
-    font-weight: 600;
-  }
-  .tab-badge {
-    display: inline-block;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
-    border-radius: 8px;
-    padding: 0 5px;
-    font-size: 9px;
-    margin-left: 4px;
-    vertical-align: middle;
-    line-height: 14px;
-  }
-
-  /* ── Tab content ── */
-  .tab-content { display: none; flex: 1; overflow: auto; }
-  .tab-content.active { display: flex; flex-direction: column; }
-
   /* ── Status bar ── */
   .status-bar {
-    padding: 6px 12px;
+    padding: 5px 12px;
     font-size: 11px;
     display: flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
+  }
+  .status-bar + .status-bar {
+    padding-top: 0;
   }
   .status-loading { color: var(--vscode-notificationsInfoIcon-foreground); }
   .status-error { color: var(--vscode-notificationsErrorIcon-foreground); }
@@ -251,6 +215,24 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ── Indexing progress ── */
+  .indexing-bar {
+    margin: 4px 12px;
+    height: 3px;
+    background: var(--vscode-editorWidget-border);
+    border-radius: 2px;
+    overflow: hidden;
+    display: none;
+    flex-shrink: 0;
+  }
+  .indexing-bar.visible { display: block; }
+  .indexing-fill {
+    height: 100%;
+    background: var(--vscode-progressBar-background);
+    transition: width 0.3s;
+    width: 0%;
+  }
+
   /* ── Empty state ── */
   .empty-state {
     padding: 24px 16px;
@@ -262,7 +244,7 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
 
   /* ── Intent banner ── */
   .intent-banner {
-    margin: 8px 10px;
+    margin: 8px 10px 4px;
     padding: 8px 10px;
     border-radius: 4px;
     background: var(--vscode-badge-background);
@@ -281,18 +263,32 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   .intent-text { font-weight: 500; }
   .intent-meta { font-size: 10px; opacity: 0.7; margin-top: 4px; }
 
-  /* ── DAG / Sequence list ── */
-  .sequence-list { padding: 4px 0 16px; }
-  .sequence-connector {
-    margin-left: 22px;
-    width: 2px;
-    height: 12px;
+  /* ── Unified list ── */
+  .unified-list { padding: 4px 0 16px; flex: 1; overflow: auto; }
+
+  /* ── Slot separator (Completed divider) ── */
+  .slot-separator {
+    margin: 12px 10px 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--vscode-descriptionForeground);
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .slot-separator::before, .slot-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
     background: var(--vscode-editorWidget-border);
+    opacity: 0.5;
   }
 
-  /* ── Node card ── */
+  /* ── Prediction node card ── */
   .node-card {
-    margin: 0 8px;
+    margin: 0 8px 2px;
     border-radius: 5px;
     border: 1px solid var(--vscode-editorWidget-border);
     background: var(--vscode-editor-background);
@@ -329,18 +325,39 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
     background: var(--vscode-focusBorder);
     color: white;
   }
-  .node-file {
+  .node-filename {
     flex: 1;
     min-width: 0;
     font-size: 11px;
-  }
-  .node-filename {
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .node-line { font-size: 10px; color: var(--vscode-descriptionForeground); }
+  .node-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .node-desc {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+  .review-comment-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .review-comment-desc {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
 
   .node-status { font-size: 12px; flex-shrink: 0; }
   .status-pending { color: var(--vscode-editorWarning-foreground); }
@@ -400,45 +417,9 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   }
   .btn-reject:hover { background: var(--vscode-testing-iconFailed); color: white; }
 
-  /* ── Footer stats ── */
-  .footer {
-    padding: 8px 12px;
-    font-size: 10px;
-    color: var(--vscode-descriptionForeground);
-    border-top: 1px solid var(--vscode-sideBarSectionHeader-border);
-    display: flex;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-
-  /* ── Indexing progress ── */
-  .indexing-bar {
-    margin: 4px 12px;
-    height: 3px;
-    background: var(--vscode-editorWidget-border);
-    border-radius: 2px;
-    overflow: hidden;
-    display: none;
-    flex-shrink: 0;
-  }
-  .indexing-bar.visible { display: block; }
-  .indexing-fill {
-    height: 100%;
-    background: var(--vscode-progressBar-background);
-    transition: width 0.3s;
-    width: 0%;
-  }
-
-  /* ── Review tab ── */
-  .review-toolbar {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
-    flex-shrink: 0;
-  }
-  .review-list { padding: 8px 0 16px; flex: 1; overflow: auto; }
-
+  /* ── Review comment card ── */
   .review-comment {
-    margin: 0 8px 6px;
+    margin: 0 8px 2px;
     border-radius: 4px;
     border: 1px solid var(--vscode-editorWidget-border);
     background: var(--vscode-editor-background);
@@ -447,13 +428,22 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   .review-comment-header {
     display: flex;
     align-items: center;
-    padding: 5px 8px;
+    padding: 6px 8px;
     gap: 6px;
     cursor: pointer;
     border-bottom: 1px solid transparent;
   }
   .review-comment-header:hover { background: var(--vscode-list-hoverBackground); }
   .review-comment.expanded .review-comment-header { border-bottom-color: var(--vscode-editorWidget-border); }
+
+  .review-chevron {
+    font-size: 14px;
+    color: var(--vscode-descriptionForeground);
+    transition: transform 0.15s;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .review-comment.expanded .review-chevron { transform: rotate(90deg); }
 
   .severity-dot {
     width: 8px; height: 8px;
@@ -464,28 +454,16 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   .severity-warning .severity-dot { background: var(--vscode-notificationsWarningIcon-foreground, #fa0); }
   .severity-info .severity-dot { background: var(--vscode-notificationsInfoIcon-foreground, #4af); }
 
-  .review-comment-meta {
-    flex: 1;
-    min-width: 0;
-    font-size: 11px;
-  }
   .review-comment-file {
+    font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .review-comment-location {
-    font-size: 10px;
-    color: var(--vscode-descriptionForeground);
-  }
-  .review-comment-category {
-    font-size: 10px;
-    color: var(--vscode-descriptionForeground);
-    text-transform: capitalize;
-  }
 
-  .review-comment-body { padding: 6px 8px 8px; }
+  .review-comment-body { padding: 6px 8px 8px; display: none; }
+  .review-comment.expanded .review-comment-body { display: block; }
   .review-comment-message {
     font-size: 11px;
     line-height: 1.5;
@@ -500,12 +478,8 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
     margin-bottom: 6px;
     line-height: 1.4;
   }
-  .review-comment-suggestion::before {
-    content: "💡 ";
-    font-size: 10px;
-  }
+  .review-comment-suggestion::before { content: "💡 "; font-size: 10px; }
 
-  /* Code snippet inside review comment */
   .review-snippet {
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 10px;
@@ -521,11 +495,7 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
     line-height: 1.4;
   }
 
-  .review-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
+  .review-actions { display: flex; gap: 6px; align-items: center; }
   .btn-goto {
     background: transparent;
     color: var(--vscode-textLink-foreground);
@@ -538,25 +508,6 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   }
   .btn-goto:hover { background: var(--vscode-textLink-foreground); color: white; }
 
-  .review-summary {
-    margin: 8px 8px 0;
-    padding: 8px 10px;
-    border-radius: 4px;
-    background: var(--vscode-badge-background);
-    color: var(--vscode-badge-foreground);
-    font-size: 11px;
-    border-left: 3px solid var(--vscode-focusBorder);
-    line-height: 1.5;
-    flex-shrink: 0;
-  }
-  .review-summary-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: 0.7;
-    margin-bottom: 3px;
-  }
-
   .severity-badge {
     font-size: 9px;
     padding: 1px 5px;
@@ -567,6 +518,17 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
   .severity-error .severity-badge { background: var(--vscode-notificationsErrorIcon-foreground, #f44); color: white; }
   .severity-warning .severity-badge { background: var(--vscode-notificationsWarningIcon-foreground, #fa0); color: white; }
   .severity-info .severity-badge { background: var(--vscode-notificationsInfoIcon-foreground, #4af); color: white; }
+
+  /* ── Footer stats ── */
+  .footer {
+    padding: 8px 12px;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    border-top: 1px solid var(--vscode-sideBarSectionHeader-border);
+    display: flex;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -574,117 +536,74 @@ export class EditSequencePanel implements vscode.WebviewViewProvider {
 <div class="header">
   <div class="header-title">◈ Cue Pro</div>
   <div class="header-actions">
-    <button class="btn btn-primary" onclick="triggerAnalysis()">Analyze</button>
-    <button class="btn btn-secondary" onclick="indexWorkspace()">Index</button>
-    <button class="btn btn-icon" title="Clear sequence" onclick="clearSequence()">✕</button>
+    <button class="btn btn-icon" title="Clear all" onclick="clearAll()">✕</button>
   </div>
 </div>
 
+<div id="indexing-label" style="display:none;padding:4px 12px 2px;font-size:11px;color:var(--vscode-descriptionForeground)">
+  <span class="spinner" style="width:8px;height:8px;border-width:1.5px;margin-right:5px;vertical-align:middle"></span>正在构建代码向量数据库…
+</div>
 <div id="indexing-bar" class="indexing-bar">
   <div id="indexing-fill" class="indexing-fill"></div>
 </div>
 
-<!-- ── Tab bar ─────────────────────────────── -->
-<div class="tab-bar">
-  <button class="tab active" id="tab-predictions" onclick="switchTab('predictions')">
-    Predictions<span id="pred-badge" class="tab-badge" style="display:none"></span>
-  </button>
-  <button class="tab" id="tab-review" onclick="switchTab('review')">
-    Code Review<span id="review-badge" class="tab-badge" style="display:none"></span>
-  </button>
+<div id="status-bar" class="status-bar" style="display:none">
+  <span id="status-icon" class="spinner"></span>
+  <span id="status-text"></span>
+</div>
+<div id="review-status-bar" class="status-bar" style="display:none">
+  <span id="review-status-icon" class="spinner"></span>
+  <span id="review-status-text"></span>
 </div>
 
-<!-- ── Predictions tab ─────────────────────── -->
-<div class="tab-content active" id="content-predictions">
-  <div id="status-bar" class="status-bar" style="display:none">
-    <span id="status-icon" class="spinner"></span>
-    <span id="status-text"></span>
-  </div>
-  <div id="empty-state" class="empty-state">
-    <div class="icon">◈</div>
-    <p>No edit sequence yet.<br>Start editing and Cue Pro will predict related changes across your repository.</p>
-    <button class="btn btn-primary" onclick="triggerAnalysis()">Analyze Now</button>
-  </div>
-  <div id="sequence-view" style="display:none; flex-direction: column; flex: 1;">
-    <div id="intent-banner" class="intent-banner">
-      <div class="intent-label">Intent</div>
-      <div id="intent-text" class="intent-text"></div>
-      <div id="intent-meta" class="intent-meta"></div>
-    </div>
-    <div id="sequence-list" class="sequence-list"></div>
-    <div id="footer" class="footer">
-      <span id="footer-stats"></span>
-      <span id="footer-time"></span>
-    </div>
-  </div>
+<div id="intent-banner" class="intent-banner" style="display:none">
+  <div class="intent-label">Intent</div>
+  <div id="intent-text" class="intent-text"></div>
+  <div id="intent-meta" class="intent-meta"></div>
 </div>
 
-<!-- ── Code Review tab ────────────────────── -->
-<div class="tab-content" id="content-review">
-  <div id="review-status-bar" class="status-bar" style="display:none">
-    <span id="review-status-icon" class="spinner"></span>
-    <span id="review-status-text"></span>
-  </div>
-  <div id="review-empty" class="empty-state">
-    <div class="icon">🔍</div>
-    <p>Review will appear automatically after each analysis run.<br>Changes must have ≥ 5 lines modified with a 60 s cooldown between reviews.</p>
-    <button class="btn btn-secondary" onclick="triggerReview()">Review Now</button>
-  </div>
-  <div id="review-view" style="display:none; flex-direction: column; flex: 1;">
-    <div class="review-toolbar">
-      <button class="btn btn-primary" onclick="triggerReview()">↻ Re-review</button>
-    </div>
-    <div id="review-summary" class="review-summary" style="display:none">
-      <div class="review-summary-label">Summary</div>
-      <div id="review-summary-text"></div>
-    </div>
-    <div id="review-list" class="review-list"></div>
-  </div>
+<div id="empty-state" class="empty-state">
+  <div class="icon">◈</div>
+  <p>Start editing. Cue Pro will predict related changes and review your code automatically.</p>
+</div>
+
+<div id="unified-list" class="unified-list" style="display:none"></div>
+
+<div id="footer" class="footer" style="display:none">
+  <span id="footer-stats"></span>
+  <span id="footer-time"></span>
 </div>
 
 <script>
 const vscode = acquireVsCodeApi();
 
-// ── State ────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────
 let currentResult = null;
 let currentReview = null;
 let activeId = null;
 let expandedIds = new Set();
 let expandedReviewIds = new Set();
-let currentTab = 'predictions';
 
-// ── Tab switching ─────────────────────────────────────────────
-function switchTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  document.getElementById('content-' + tab).classList.add('active');
-}
-
-// ── Message handling ─────────────────────────────────────────
+// ── Message handling ───────────────────────────────────────────
 window.addEventListener('message', event => {
   const msg = event.data;
   switch (msg.type) {
     case 'updateSequence':
       currentResult = msg.data;
       activeId = null;
-      if (currentResult && currentResult.sequence.length > 0) {
-        expandedIds = new Set([currentResult.sequence[0].id]);
-      }
-      renderPredictions();
-      updatePredBadge();
+      expandedIds = new Set();
+      renderUnified();
       break;
     case 'updateCandidateStatus':
       if (currentResult) {
         const c = currentResult.sequence.find(c => c.id === msg.id);
-        if (c) { c.status = msg.status; renderSequence(); }
+        if (c) { c.status = msg.status; renderUnified(); }
       }
       break;
     case 'setActiveCandidateId':
       activeId = msg.id;
       if (msg.id) expandedIds.add(msg.id);
-      renderSequence();
+      renderUnified();
       break;
     case 'setLoading':
       setStatus(msg.loading, msg.message || '');
@@ -697,8 +616,7 @@ window.addEventListener('message', event => {
       break;
     case 'updateReview':
       currentReview = msg.data;
-      renderReview();
-      updateReviewBadge();
+      renderUnified();
       break;
     case 'setReviewLoading':
       setReviewStatus(msg.loading, msg.message || '');
@@ -709,78 +627,109 @@ window.addEventListener('message', event => {
   }
 });
 
-// ── Badge helpers ─────────────────────────────────────────────
-function updatePredBadge() {
-  const badge = document.getElementById('pred-badge');
-  if (currentResult && currentResult.sequence.length > 0) {
-    badge.textContent = currentResult.sequence.length;
-    badge.style.display = '';
-  } else {
-    badge.style.display = 'none';
+// ── Unified priority score ──────────────────────────────────────
+// review severity → score: error=0.95, warning=0.65, info=0.35
+// prediction → flowScore (0~1), completed → -1
+function getItemScore(item) {
+  if (item.itemType === 'review') {
+    if (item.severity === 'error')   return 0.95;
+    if (item.severity === 'warning') return 0.65;
+    return 0.35;
   }
-}
-function updateReviewBadge() {
-  const badge = document.getElementById('review-badge');
-  if (currentReview && currentReview.comments.length > 0) {
-    const errors = currentReview.comments.filter(c => c.severity === 'error').length;
-    const warnings = currentReview.comments.filter(c => c.severity === 'warning').length;
-    badge.textContent = errors > 0 ? errors + ' err' : warnings > 0 ? warnings + ' warn' : currentReview.comments.length;
-    badge.style.display = '';
-  } else {
-    badge.style.display = 'none';
-  }
+  if (item.status !== 'pending') return -1;
+  return item.flowScore ?? 0;
 }
 
-// ── Predictions rendering ─────────────────────────────────────
-function renderPredictions() {
-  hideStatus();
-  clearError();
+function buildUnifiedItems() {
+  const items = [];
+  if (currentReview) {
+    currentReview.comments.forEach((c, idx) => {
+      items.push({ itemType: 'review', _reviewIdx: idx, ...c });
+    });
+  }
+  if (currentResult) {
+    currentResult.sequence.forEach(c => {
+      items.push({ itemType: 'prediction', ...c });
+    });
+  }
+  items.sort((a, b) => getItemScore(b) - getItemScore(a));
+  return items;
+}
+
+// ── Main render ────────────────────────────────────────────────
+function renderUnified() {
+  updateIntentBanner();
+  const items = buildUnifiedItems();
+
   const emptyState = document.getElementById('empty-state');
-  const seqView = document.getElementById('sequence-view');
+  const list = document.getElementById('unified-list');
+  const footer = document.getElementById('footer');
 
-  if (!currentResult || currentResult.sequence.length === 0) {
+  if (items.length === 0) {
     emptyState.style.display = '';
-    seqView.style.display = 'none';
+    list.style.display = 'none';
+    footer.style.display = 'none';
     return;
   }
 
   emptyState.style.display = 'none';
-  seqView.style.display = 'flex';
+  list.style.display = '';
+  list.innerHTML = '';
 
+  let completedSepShown = false;
+  items.forEach(item => {
+    const isCompleted = item.itemType === 'prediction' && item.status !== 'pending';
+    if (isCompleted && !completedSepShown) {
+      completedSepShown = true;
+      const sep = document.createElement('div');
+      sep.className = 'slot-separator';
+      sep.textContent = 'Completed';
+      list.appendChild(sep);
+    }
+    if (item.itemType === 'prediction') {
+      list.appendChild(buildNodeCard(item));
+    } else {
+      list.appendChild(buildReviewCard(item, item._reviewIdx));
+    }
+  });
+
+  // Footer stats
+  const parts = [];
+  if (currentResult) {
+    const accepted = currentResult.sequence.filter(c => c.status === 'accepted').length;
+    const pending  = currentResult.sequence.filter(c => c.status === 'pending').length;
+    const total    = currentResult.sequence.length;
+    parts.push(\`\${accepted}/\${total} edits accepted · \${pending} pending\`);
+  }
+  if (currentReview) {
+    const errors   = currentReview.comments.filter(c => c.severity === 'error').length;
+    const warnings = currentReview.comments.filter(c => c.severity === 'warning').length;
+    if (errors > 0)   parts.push(\`\${errors} error\${errors > 1 ? 's' : ''}\`);
+    if (warnings > 0) parts.push(\`\${warnings} warning\${warnings > 1 ? 's' : ''}\`);
+  }
+  document.getElementById('footer-stats').textContent = parts.join(' · ');
+  const ts = (currentResult?.timestamp ?? currentReview?.timestamp) ?? 0;
+  document.getElementById('footer-time').textContent = ts ? new Date(ts).toLocaleTimeString() : '';
+  footer.style.display = '';
+}
+
+function updateIntentBanner() {
+  const banner = document.getElementById('intent-banner');
+  if (!currentResult || currentResult.sequence.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = '';
   document.getElementById('intent-text').textContent = currentResult.intent;
   const pending = currentResult.sequence.filter(c => c.status === 'pending').length;
-  const total = currentResult.sequence.length;
+  const total   = currentResult.sequence.length;
   document.getElementById('intent-meta').textContent =
     \`\${pending} pending · \${total} total · \${currentResult.durationMs}ms\`;
-
-  renderSequence();
-
-  const accepted = currentResult.sequence.filter(c => c.status === 'accepted').length;
-  document.getElementById('footer-stats').textContent = \`\${accepted}/\${total} accepted\`;
-  document.getElementById('footer-time').textContent = new Date(currentResult.timestamp).toLocaleTimeString();
 }
 
-function renderSequence() {
-  if (!currentResult) return;
-  const list = document.getElementById('sequence-list');
-  list.innerHTML = '';
-  currentResult.sequence.forEach((c, idx) => {
-    if (idx > 0) {
-      const connector = document.createElement('div');
-      connector.className = 'sequence-connector';
-      list.appendChild(connector);
-    }
-    list.appendChild(buildNodeCard(c));
-  });
-  const pending = currentResult.sequence.filter(c => c.status === 'pending').length;
-  const accepted = currentResult.sequence.filter(c => c.status === 'accepted').length;
-  const total = currentResult.sequence.length;
-  document.getElementById('footer-stats').textContent =
-    \`\${accepted}/\${total} accepted · \${pending} pending\`;
-}
-
+// ── Prediction node card ───────────────────────────────────────
 function buildNodeCard(c) {
-  const isActive = c.id === activeId;
+  const isActive   = c.id === activeId;
   const isExpanded = expandedIds.has(c.id);
   const card = document.createElement('div');
   card.className = \`node-card \${c.status} \${isActive ? 'active' : ''} \${isExpanded ? 'expanded' : ''}\`;
@@ -792,10 +741,10 @@ function buildNodeCard(c) {
     : '';
 
   const statusIcon = {
-    pending: '<span class="status-pending">◈</span>',
+    pending:  '<span class="status-pending">◈</span>',
     accepted: '<span class="status-accepted">✓</span>',
     rejected: '<span class="status-rejected">✕</span>',
-    skipped: '<span>—</span>',
+    skipped:  '<span>—</span>',
   }[c.status] || '';
 
   const scoreWidth = Math.round(c.flowScore * 100);
@@ -803,9 +752,9 @@ function buildNodeCard(c) {
   card.innerHTML = \`
     <div class="node-header" onclick="toggleCard('\${c.id}', event)">
       <div class="node-order">\${c.order}</div>
-      <div class="node-file">
-        <div class="node-filename" title="\${c.relativeFile}">\${escHtml(filename)}</div>
-        <div class="node-line">\${escHtml(dir)}line \${c.startLine + 1}</div>
+      <div class="node-info">
+        <div class="node-filename" title="\${c.relativeFile}">\${escHtml(filename)}:\${c.startLine + 1}</div>
+        <div class="node-desc">\${escHtml(truncDesc(c.reason, 32))}</div>
       </div>
       <div class="node-status">\${statusIcon}</div>
     </div>
@@ -827,10 +776,10 @@ function buildNodeCard(c) {
 function buildDiffHtml(c) {
   if (!c.originalCode && !c.suggestedCode) return '';
   const origLines = (c.originalCode || '').split('\\n');
-  const newLines = (c.suggestedCode || '').split('\\n');
+  const newLines  = (c.suggestedCode || '').split('\\n');
   let html = '<div class="diff-block">';
   origLines.forEach(l => { html += \`<div class="diff-line removed">-\${escHtml(l)}</div>\`; });
-  newLines.forEach(l => { html += \`<div class="diff-line added">+\${escHtml(l)}</div>\`; });
+  newLines.forEach(l  => { html += \`<div class="diff-line added">+\${escHtml(l)}</div>\`; });
   html += '</div>';
   return html;
 }
@@ -843,52 +792,11 @@ function toggleCard(id, event) {
     expandedIds.add(id);
     vscode.postMessage({ type: 'navigateTo', candidateId: id });
   }
-  renderSequence();
+  const card = document.getElementById(\`node-\${id}\`);
+  if (card) card.classList.toggle('expanded', expandedIds.has(id));
 }
 
-// ── Review rendering ─────────────────────────────────────────
-function renderReview() {
-  const emptyEl = document.getElementById('review-empty');
-  const viewEl = document.getElementById('review-view');
-  const listEl = document.getElementById('review-list');
-  const summaryEl = document.getElementById('review-summary');
-  const summaryText = document.getElementById('review-summary-text');
-
-  if (!currentReview) {
-    emptyEl.style.display = '';
-    viewEl.style.display = 'none';
-    return;
-  }
-
-  emptyEl.style.display = 'none';
-  viewEl.style.display = 'flex';
-
-  // Summary
-  if (currentReview.summary) {
-    summaryEl.style.display = '';
-    summaryText.textContent = currentReview.summary;
-  } else {
-    summaryEl.style.display = 'none';
-  }
-
-  // Comments grouped by severity order: error > warning > info
-  const sorted = [...currentReview.comments].sort((a, b) => {
-    const order = { error: 0, warning: 1, info: 2 };
-    return (order[a.severity] ?? 3) - (order[b.severity] ?? 3);
-  });
-
-  listEl.innerHTML = '';
-
-  if (sorted.length === 0) {
-    listEl.innerHTML = '<div class="empty-state"><div class="icon">✅</div><p>No issues found. Your changes look good!</p></div>';
-    return;
-  }
-
-  sorted.forEach((comment, idx) => {
-    listEl.appendChild(buildReviewCard(comment, idx));
-  });
-}
-
+// ── Review comment card ────────────────────────────────────────
 function buildReviewCard(comment, idx) {
   const id = 'rv-' + idx;
   const severityClass = 'severity-' + comment.severity;
@@ -910,11 +818,12 @@ function buildReviewCard(comment, idx) {
   card.innerHTML = \`
     <div class="review-comment-header">
       <span class="severity-dot"></span>
-      <div class="review-comment-meta">
-        <div class="review-comment-file" title="\${escHtml(comment.file)}">\${escHtml(filename)}</div>
-        <div class="review-comment-location">\${locationText ? locationText + ' · ' : ''}<span class="review-comment-category">\${escHtml(comment.category || '')}</span></div>
+      <div class="review-comment-info">
+        <div class="review-comment-file" title="\${escHtml(comment.file)}">\${escHtml(filename)}\${hasLocation ? ':' + comment.startLine : ''}</div>
+        <div class="review-comment-desc">\${escHtml(truncDesc(comment.message, 32))}</div>
       </div>
       <span class="severity-badge">\${escHtml(comment.severity)}</span>
+      <span class="review-chevron">›</span>
     </div>
     <div class="review-comment-body">
       <div class="review-comment-message">\${escHtml(comment.message)}</div>
@@ -924,24 +833,16 @@ function buildReviewCard(comment, idx) {
     </div>
   \`;
 
-  // Toggle expand/collapse on header click
   card.querySelector('.review-comment-header').addEventListener('click', () => toggleReviewCard(id));
 
-  // Attach goto handler via closure — avoids path backslash escaping issues in onclick strings
   if (hasLocation) {
     const btn = card.querySelector('.js-goto');
     if (btn) {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', e => {
         e.stopPropagation();
         vscode.postMessage({ type: 'navigateToReview', file: comment.file, startLine: comment.startLine });
       });
     }
-  }
-
-  // Auto-expand errors
-  if (comment.severity === 'error') {
-    expandedReviewIds.add(id);
-    card.classList.add('expanded');
   }
 
   return card;
@@ -957,21 +858,23 @@ function toggleReviewCard(id) {
   if (card) card.classList.toggle('expanded', expandedReviewIds.has(id));
 }
 
-// ── Actions ──────────────────────────────────────────────────
-function navigateTo(id) { vscode.postMessage({ type: 'navigateTo', candidateId: id }); }
-function navigateToReview(file, startLine) { vscode.postMessage({ type: 'navigateToReview', file, startLine }); }
-function acceptCandidate(id) { vscode.postMessage({ type: 'acceptCandidate', candidateId: id }); }
-function rejectCandidate(id) { vscode.postMessage({ type: 'rejectCandidate', candidateId: id }); }
-function triggerAnalysis() { vscode.postMessage({ type: 'triggerAnalysis' }); }
-function indexWorkspace() { vscode.postMessage({ type: 'indexWorkspace' }); }
-function clearSequence() { currentResult = null; renderPredictions(); vscode.postMessage({ type: 'clearSequence' }); }
-function triggerReview() {
-  switchTab('review');
-  setReviewStatus(true, 'Reviewing your edits…');
-  vscode.postMessage({ type: 'triggerReview' });
+// ── Actions ───────────────────────────────────────────────────
+function navigateTo(id)        { vscode.postMessage({ type: 'navigateTo', candidateId: id }); }
+function acceptCandidate(id)   { vscode.postMessage({ type: 'acceptCandidate', candidateId: id }); }
+function rejectCandidate(id)   { vscode.postMessage({ type: 'rejectCandidate', candidateId: id }); }
+function triggerAnalysis()     { vscode.postMessage({ type: 'triggerAnalysis' }); }
+function indexWorkspace()      { vscode.postMessage({ type: 'indexWorkspace' }); }
+function triggerReview()       { setReviewStatus(true, 'Reviewing your edits…'); vscode.postMessage({ type: 'triggerReview' }); }
+function clearAll() {
+  currentResult = null;
+  currentReview = null;
+  expandedIds = new Set();
+  expandedReviewIds = new Set();
+  renderUnified();
+  vscode.postMessage({ type: 'clearSequence' });
 }
 
-// ── Status helpers ───────────────────────────────────────────
+// ── Status helpers ────────────────────────────────────────────
 function setStatus(loading, message) {
   const bar = document.getElementById('status-bar');
   if (loading) {
@@ -983,7 +886,6 @@ function setStatus(loading, message) {
     bar.style.display = 'none';
   }
 }
-function hideStatus() { document.getElementById('status-bar').style.display = 'none'; }
 function showError(message) {
   const bar = document.getElementById('status-bar');
   bar.style.display = 'flex';
@@ -992,11 +894,6 @@ function showError(message) {
   document.getElementById('status-icon').className = '';
   document.getElementById('status-text').textContent = message;
 }
-function clearError() {
-  const bar = document.getElementById('status-bar');
-  if (bar.className.includes('status-error')) bar.style.display = 'none';
-}
-
 function setReviewStatus(loading, message) {
   const bar = document.getElementById('review-status-bar');
   if (loading) {
@@ -1016,18 +913,27 @@ function showReviewError(message) {
   document.getElementById('review-status-icon').className = '';
   document.getElementById('review-status-text').textContent = message;
 }
-
 function updateIndexingBar(indexed, total) {
-  const bar = document.getElementById('indexing-bar');
-  const fill = document.getElementById('indexing-fill');
-  if (indexed >= total) { bar.classList.remove('visible'); return; }
+  const bar   = document.getElementById('indexing-bar');
+  const fill  = document.getElementById('indexing-fill');
+  const label = document.getElementById('indexing-label');
+  if (indexed >= total) {
+    bar.classList.remove('visible');
+    label.style.display = 'none';
+    return;
+  }
+  label.style.display = '';
   bar.classList.add('visible');
   fill.style.width = \`\${Math.round((indexed / total) * 100)}%\`;
 }
 
-// ── Utils ────────────────────────────────────────────────────
+// ── Utils ─────────────────────────────────────────────────────
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function truncDesc(str, max) {
+  if (!str) return '';
+  return str.length > max ? str.slice(0, max) + '…' : str;
 }
 </script>
 </body>

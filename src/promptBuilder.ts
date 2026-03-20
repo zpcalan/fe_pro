@@ -143,18 +143,24 @@ Focus on what YOU can improve in each specific block (naming, error handling, ty
 
 // ── Phase 2 ─────────────────────────────────────────────────────────────────
 
-const PHASE2_SYSTEM = `你是一位资深软件工程助手，负责对代码改动建议进行排序。
+const PHASE2_SYSTEM = `你是一位资深软件工程助手，负责对代码改动建议进行排序并评估紧迫性。
 
 你将收到一批代码改进建议（每条用 candidateIndex 标识）。
 
 你唯一的任务：
 - 按逻辑顺序对所有候选项排序
+- 为每条评估 flowScore（0.0 ~ 1.0），衡量"如果不做这个改动，会对开发流程造成多大阻碍"
+
+flowScore 评分标准：
+- 0.8 ~ 1.0：阻塞性改动，其他改动依赖于此，或存在明显 bug/类型错误，必须优先处理
+- 0.5 ~ 0.8：重要改动，影响多个模块或核心逻辑，建议尽早处理
+- 0.0 ~ 0.5：优化性改动，命名、可读性、样式等，可以稍后处理
 
 关键规则：
 - 必须在 editSequence 数组中返回所有候选项（不得过滤任何一条）
 - 为每条分配 order 编号（1 = 最先改，2 = 其次，以此类推）
-- flowScore 统一设为 1.0
-- flowReason 用中文简要说明排序理由
+- flowScore 必须是 0.0 到 1.0 之间的浮点数，根据上述标准真实评估，不得统一设为同一值
+- flowReason 用中文简要说明排序理由和评分依据
 
 输出格式（严格 JSON，无 markdown）：
 {
@@ -162,8 +168,8 @@ const PHASE2_SYSTEM = `你是一位资深软件工程助手，负责对代码改
     {
       "candidateIndex": 1,
       "order": 1,
-      "flowScore": 1.0,
-      "flowReason": "基础接口变更应最先完成，其他模块依赖于此"
+      "flowScore": 0.9,
+      "flowReason": "基础接口变更，其他模块均依赖于此，必须优先完成"
     }
   ]
 }

@@ -25,7 +25,7 @@ export class EmbeddingClient {
     const cfg = getConfig();
     if (!cfg.embeddingEnabled || texts.length === 0) return null;
 
-    const url = `${cfg.embeddingApiUrl.replace(/\/$/, '')}/v1/embeddings`;
+    const url = `${cfg.embeddingApiUrl.replace(/\/$/, '')}/`;
     const body: EmbeddingRequest = {
       model: cfg.embeddingModel,
       input: texts,

@@ -80,16 +80,18 @@ export class EditSequenceEngine {
    *   Rule 2 — Significant change: total changed lines >= MIN_REVIEW_LINES
    *   Rule 3 — Cooldown: at least REVIEW_COOLDOWN_MS since the last review
    */
-  private scheduleAutoReview(snapshots: EditSnapshot[]): void {
-    // Rule 2: count total changed lines
+  private scheduleAutoReview(snapshots: EditSnapshot[], sequenceResult: EditSequenceResult): void {
+    // Rule 2: count changed lines via line count delta
     const changedLines = snapshots.reduce((sum, s) => {
-      const before = s.beforeCode.split('\n').length;
-      const after = s.afterCode.split('\n').length;
-      return sum + Math.abs(after - before) + 1; // +1 as a floor so tiny edits still count
+      if (s.beforeCode === s.afterCode) return sum;
+      const beforeLines = s.beforeCode.split('\n').length;
+      const afterLines  = s.afterCode.split('\n').length;
+      return sum + Math.abs(afterLines - beforeLines);
     }, 0);
 
     if (changedLines < EditSequenceEngine.MIN_REVIEW_LINES) {
       console.log(`[CuePro Review] Auto-review skipped: only ${changedLines} lines changed (min ${EditSequenceEngine.MIN_REVIEW_LINES})`);
+      this.onSequenceUpdated.fire(sequenceResult);
       return;
     }
 
@@ -98,16 +100,17 @@ export class EditSequenceEngine {
     const elapsed = now - this.lastReviewTime;
     if (elapsed < EditSequenceEngine.REVIEW_COOLDOWN_MS) {
       console.log(`[CuePro Review] Auto-review skipped: cooldown (${Math.round(elapsed / 1000)}s < ${EditSequenceEngine.REVIEW_COOLDOWN_MS / 1000}s)`);
+      this.onSequenceUpdated.fire(sequenceResult);
       return;
     }
 
-    // Schedule with a short delay so the Predictions panel renders first
+    // Trigger review; fire sequence + review together when done
     if (this.autoReviewTimer) {
       clearTimeout(this.autoReviewTimer);
     }
     this.autoReviewTimer = setTimeout(() => {
       console.log('[CuePro Review] Auto-triggering code review…');
-      this.runReview(snapshots);
+      this.runReview(snapshots, sequenceResult);
     }, EditSequenceEngine.AUTO_REVIEW_DELAY_MS);
   }
 
@@ -126,8 +129,11 @@ export class EditSequenceEngine {
     await this.runReview(snapshots);
   }
 
-  private async runReview(snapshots: EditSnapshot[]): Promise<void> {
-    if (this.reviewRunning) return;
+  private async runReview(snapshots: EditSnapshot[], sequenceResult?: EditSequenceResult): Promise<void> {
+    if (this.reviewRunning) {
+      if (sequenceResult) this.onSequenceUpdated.fire(sequenceResult);
+      return;
+    }
     this.reviewRunning = true;
     this.lastReviewTime = Date.now();
 
@@ -179,10 +185,12 @@ export class EditSequenceEngine {
         }),
         summary: result.summary ?? '',
       };
+      if (sequenceResult) this.onSequenceUpdated.fire(sequenceResult);
       this.onReviewUpdated.fire(reviewResult);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[CuePro Review] Failed:', err);
+      if (sequenceResult) this.onSequenceUpdated.fire(sequenceResult);
       this.onReviewError.fire(message);
     } finally {
       this.reviewRunning = false;
@@ -317,10 +325,7 @@ export class EditSequenceEngine {
         durationMs: Date.now() - startTime,
       };
 
-      this.onSequenceUpdated.fire(result);
-
-      // ── Auto-review: schedule in background after a short delay ────────
-      this.scheduleAutoReview(snapshots);
+      this.scheduleAutoReview(snapshots, result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[CuePro] Analysis failed:', err);

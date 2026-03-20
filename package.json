@@ -121,17 +121,17 @@
         },
         "cuePro.embedding.apiUrl": {
           "type": "string",
-          "default": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+          "default": "https://api.openbitfun.com/v1/embeddings",
           "description": "Embedding service base URL (OpenAI-compatible, /v1/embeddings endpoint)"
         },
         "cuePro.embedding.apiKey": {
           "type": "string",
-          "default": "sk-82d016a8f808468894626e0ec54a0d2a",
+          "default": "sk-X2lUUKjVwkmMoElReQbma0gvxlTEHTZ7UT5AIwfGf2gNFtKE",
           "description": "Embedding API key (if required)"
         },
         "cuePro.embedding.model": {
           "type": "string",
-          "default": "text-embedding-v4",
+          "default": "Qwen/Qwen3-Embedding-0.6B",
           "description": "Embedding model name"
         },
         "cuePro.embedding.enabled": {
@@ -180,7 +180,7 @@
         "cuePro.indexing.extensions": {
           "type": "array",
           "items": { "type": "string" },
-          "default": [".ts", ".tsx", ".js", ".jsx", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".c"],
+          "default": [".ets", ".ts", ".tsx", ".js", ".jsx", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".c"],
           "description": "File extensions to index for semantic search"
         },
         "cuePro.indexing.excludePatterns": {

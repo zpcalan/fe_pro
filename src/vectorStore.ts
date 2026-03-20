@@ -41,6 +41,11 @@ export class VectorStore {
     let files: vscode.Uri[] = [];
     try {
       files = await vscode.workspace.findFiles(globPattern, `{${excludePatterns}}`);
+      // Glob exclude is sometimes unreliable for oh_modules — filter explicitly
+      files = files.filter(uri => {
+        const p = uri.fsPath.replace(/\\/g, '/');
+        return !p.includes('/oh_modules/') && !p.includes('/.ohpm/');
+      });
     } catch (err) {
       console.error('[CuePro] Failed to find files for indexing:', err);
       this.indexing = false;
@@ -103,15 +108,24 @@ export class VectorStore {
    * Falls back to keyword matching if no vectors are available.
    */
   async search(queryText: string, topK: number): Promise<SemanticSearchResult[]> {
-    if (this.chunks.length === 0) return [];
-
-    // Try vector-based search first
-    const queryVector = await this.embeddingClient.embed(queryText);
-    if (queryVector && queryVector.length > 0) {
-      return this.vectorSearch(queryVector, topK);
+    if (this.chunks.length === 0) {
+      console.log('[CuePro VectorStore] search called but store is empty (not indexed yet)');
+      return [];
     }
 
-    // Fallback: keyword search
+    const chunksWithVectors = this.chunks.filter(c => c.vector.length > 0);
+    console.log(`[CuePro VectorStore] search: ${this.chunks.length} total chunks, ${chunksWithVectors.length} with vectors`);
+
+    // Try vector-based search if we have indexed vectors
+    if (chunksWithVectors.length > 0) {
+      const queryVector = await this.embeddingClient.embed(queryText);
+      if (queryVector && queryVector.length > 0) {
+        return this.vectorSearch(queryVector, topK);
+      }
+    }
+
+    // Fallback: keyword search (covers both "no embedding API" and "indexed without vectors")
+    console.log('[CuePro VectorStore] falling back to keyword search');
     return this.keywordSearch(queryText, topK);
   }
 

@@ -163,6 +163,7 @@ export function activate(context: vscode.ExtensionContext): void {
   panel.onClearSequence = () => {
     navigator.setSequence(null);
     decorationManager.updateSequence(null);
+    panel.updateReview(null);
     statusBarItem.text = '$(sparkle) Cue Pro';
   };
 
@@ -216,6 +217,16 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand('cuePro.sequencePanel.focus');
     })
   );
+
+  // ── Auto-index workspace on startup (delayed to let VS Code settle) ──
+  setTimeout(() => {
+    if (!vectorStore.isIndexing && vectorStore.chunkCount === 0) {
+      console.log('[CuePro] Auto-indexing workspace on startup…');
+      vectorStore.indexWorkspace().catch(err => {
+        console.error('[CuePro] Auto-index failed:', err);
+      });
+    }
+  }, 2000);
 
   // ── Initial setup: set VS Code contexts ───────────────────
   vscode.commands.executeCommand('setContext', 'cuePro.hasSequence', false);

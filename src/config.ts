@@ -60,10 +60,11 @@ export function getConfig(): CueProConfig {
     codeContextLines: cfg.get<number>('context.codeContextLines', 20),
 
     indexingExtensions: cfg.get<string[]>('indexing.extensions', [
-      '.ts', '.tsx', '.js', '.jsx', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.c',
+      '.ets', '.ts', '.tsx', '.js', '.jsx', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.c',
     ]),
     indexingExcludePatterns: cfg.get<string[]>('indexing.excludePatterns', [
-      '**/node_modules/**', '**/out/**', '**/dist/**', '**/.git/**', '**/build/**',
+      '**/node_modules/**', '**/oh_modules/**', '**/.ohpm/**',
+      '**/out/**', '**/dist/**', '**/.git/**', '**/build/**',
     ]),
 
     showInlineDecorations: cfg.get<boolean>('ui.showInlineDecorations', true),

@@ -84,6 +84,11 @@ export class LspBridge {
   ): Promise<CandidateLocation | null> {
     if (location.uri.scheme !== 'file') return null;
 
+    const fsPath = location.uri.fsPath.replace(/\\/g, '/');
+    if (fsPath.includes('/oh_modules/') || fsPath.includes('/.ohpm/') || fsPath.includes('/node_modules/')) {
+      return null;
+    }
+
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(location.uri);
     const relativeFile = workspaceFolder
       ? path.relative(workspaceFolder.uri.fsPath, location.uri.fsPath)
@@ -278,6 +283,11 @@ export class LspBridge {
     contextLines: number
   ): Promise<LspLocation | null> {
     if (location.uri.scheme !== 'file') return null;
+
+    const fsPath = location.uri.fsPath.replace(/\\/g, '/');
+    if (fsPath.includes('/oh_modules/') || fsPath.includes('/.ohpm/') || fsPath.includes('/node_modules/')) {
+      return null;
+    }
 
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(location.uri);
     const relativeFile = workspaceFolder
